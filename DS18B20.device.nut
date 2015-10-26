@@ -11,10 +11,14 @@ class OneWireStub
 {
     
     _wire = null;
+    _name = null;
+    _debug = null;
     
-    constructor ( uart ) {
-        // if ( uart == null ) return null;
+    constructor ( uart, name = null, debug = false ) {
+        if ( uart == null ) return null;
         _wire = Onewire( uart );
+        _name = name;
+        _debug = debug;
     }
     
     function uuid( device ) {
@@ -25,23 +29,24 @@ class OneWireStub
     function discover( ) {
 
         // discover devices
-        server.log("Scanning 1-wire bus..." );
+        if ( _debug )
+            server.log("Scanning 1-wire bus on " + _name + "..." );
         local success = _wire.init();
         if (success) {
             local numDevs = _wire.getDeviceCount();
-            server.log( format(" discovered %d devices", numDevs) );
+            if ( _debug )
+                server.log( format(" discovered %d devices", numDevs) );
             if ( numDevs < 1 ) {
                 success = false;
             } else {
                 for (local i = 0 ; i < numDevs ; i++) {
                     local device = _wire.getDevice(i);
                     local id = uuid( device );
-                    server.log(" found " + id);
+                    if ( _debug )
+                        server.log("  found " + id);
                 }
             }
         }
-    
-        
 
         if (! success) {
             server.log("Error: no 1-_wire devices found");
@@ -59,12 +64,12 @@ class DS18B20 extends OneWireStub
     // conversion time
     static DS18B20_CONVERSION_TIME = 0.75;
     
-    function getTemp() {
+    function get() {
 
         // Reset the 1-Wire bus
-        local result = _wire.reset();
-        if (result) {
-                
+        local success = _wire.reset();
+        if (success) {
+            
             // Issue 1-Wire Skip ROM command (0xCC) to select all devices on the bus
             _wire.skipRom()
   
@@ -73,6 +78,8 @@ class DS18B20 extends OneWireStub
     
             // Wait 750ms for the temperature conversion to finish
             imp.sleep( DS18B20_CONVERSION_TIME );
+
+            
 
             // poll each sensor to get the results
             local numDevs = _wire.getDeviceCount();
@@ -113,12 +120,14 @@ class DS18B20 extends OneWireStub
                         tempCelsius = null;
                     }
                     
-                    if ( tempCelsius == null ) {
-                        server.log( format("device %2d: %s (%02x)\t temp: -", i, uuid, device[7]) );
-                    } else {
-                        server.log( format("device %2d: %s (%02x)\t temp: %3.2f", i, uuid, device[7], tempCelsius) );
-                    }
-                
+                    yield { name = _name, uuid = uuid, temp = tempCelsius };
+                    
+                    if ( _debug )
+                        if ( tempCelsius == null )
+                            server.log( format("device %2d: %s (%02x)\t temp: -", i, uuid, device[7]) );
+                        else
+                            server.log( format("device %2d: %s (%02x)\t temp: %3.2f", i, uuid, device[7], tempCelsius) );
+
                 } // if hex is ds18s20
 
             } // for each device
@@ -139,14 +148,19 @@ function discover() {
 function getTemp(){
     imp.wakeup( TEMPERATURE_FREQUENCY, getTemp );
     foreach( k,this_string in STRING_O_SENSORS ) {
-        this_string.getTemp()
+        foreach( r in this_string.get() ) {
+            if ( r.temp == null )
+                server.log( format("uart %s, device %s\t temp: -", r.name, r.uuid) );
+            else
+                server.log( format("uart %s, device %s\t temp: %3.2f", r.name, r.uuid, r.temp) );
+        }
     }
 }
 
 // initiate
 STRING_O_SENSORS <- {
-    uart12 = DS18B20( hardware.uart12 )
-    uart57 = DS18B20( hardware.uart57 )
+    uart12 = DS18B20( hardware.uart12, "uart12" )
+    uart57 = DS18B20( hardware.uart57, "uart57" )
 }
 
 // start loops
