@@ -49,7 +49,7 @@ class OneWireStub
         }
 
         if (! success) {
-            server.log("Error: no 1-_wire devices found");
+            server.log("Error: no 1-wire devices found on " + _name);
         }
     
         return success;
@@ -120,7 +120,7 @@ class DS18B20 extends OneWireStub
                         tempCelsius = null;
                     }
                     
-                    yield { name = _name, uuid = uuid, temp = tempCelsius };
+                    yield { name = _name, uuid = uuid, temp = tempCelsius, index = i };
                     
                     if ( _debug )
                         if ( tempCelsius == null )
@@ -150,9 +150,9 @@ function getTemp(){
     foreach( k,this_string in STRING_O_SENSORS ) {
         foreach( r in this_string.get() ) {
             if ( r.temp == null )
-                server.log( format("uart %s, device %s\t temp: -", r.name, r.uuid) );
+                server.log( format("uart %s %d, device %s\t temp: -", r.name, r.index. r.uuid) );
             else
-                server.log( format("uart %s, device %s\t temp: %3.2f", r.name, r.uuid, r.temp) );
+                server.log( format("uart %s %02d, device %s\t temp: %3.2f", r.name, r.index, r.uuid, r.temp) );
         }
     }
 }
