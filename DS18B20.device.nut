@@ -11,12 +11,14 @@ class OneWireStub
 {
     
     _wire = null;
+    _parasite_mode = null;
     _name = null;
     _debug = null;
     
-    constructor ( uart, name = null, debug = false ) {
+    constructor ( uart, name = null, parasite_mode = false, debug = true ) {
         if ( uart == null ) return null;
         _wire = Onewire( uart );
+        _parasite_mode = parasite_mode;
         _name = name;
         _debug = debug;
     }
@@ -24,6 +26,13 @@ class OneWireStub
     function uuid( device ) {
         return format("%02x%02x.%02x%02x.%02x%02x.%02x%02x",
                         device[0],device[1],device[2],device[3],device[4],device[5],device[6],device[7])
+    }
+
+    function select( device ) {
+        // Write out the 64-bit ID from the array's eight bytes
+        for (local i = 7 ; i >= 0 ; i--) {
+            _wire.writeByte(device[i]);
+        }
     }
 
     function discover( ) {
@@ -42,8 +51,9 @@ class OneWireStub
                 for (local i = 0 ; i < numDevs ; i++) {
                     local device = _wire.getDevice(i);
                     local id = uuid( device );
+                    local power = readPowerSupply( device );
                     if ( _debug )
-                        server.log("  found " + id);
+                        server.log( "  found " + id + ", power mode " + power );
                 }
             }
         }
@@ -54,6 +64,20 @@ class OneWireStub
     
         return success;
 
+    }
+    
+    function readPowerSupply( device ) {
+        _wire.reset();
+        select( device );
+        _wire.writeByte(0xB4);
+        local bit = _wire._uart.read();
+        local power = null;
+        if( bit )
+            power = true;
+        else
+            power = false;
+        _wire.reset();
+        return power;
     }
 
 }
@@ -76,10 +100,11 @@ class DS18B20 extends OneWireStub
             // Issue DS18B20 Convert command (0x44) to tell all DS18B20s to get the temperature
             _wire.writeByte(0x44);
     
+            // need strong pullup for parasite mode
+            
+    
             // Wait 750ms for the temperature conversion to finish
             imp.sleep( DS18B20_CONVERSION_TIME );
-
-            
 
             // poll each sensor to get the results
             local numDevs = _wire.getDeviceCount();
@@ -97,9 +122,7 @@ class DS18B20 extends OneWireStub
                     _wire.writeByte(0x55);
     
                     // Write out the 64-bit ID from the array's eight bytes
-                    for (local i = 7 ; i >= 0 ; i--) {
-                        _wire.writeByte(device[i]);
-                    }
+                    select( device );
         
                     // Issue the DS18B20's READ SCRATCHPAD command (0xBE) to get temperature
                     _wire.writeByte(0xBE);
@@ -128,6 +151,11 @@ class DS18B20 extends OneWireStub
                         else
                             server.log( format("device %2d: %s (%02x)\t temp: %3.2f", i, uuid, device[7], tempCelsius) );
 
+                } else {
+                  
+                  if( _debug )
+                    server.log( format("device %2d: %s (%02x) is not a ds18b20 temperature sensor", i, uuid, device[7]) );
+                    
                 } // if hex is ds18s20
 
             } // for each device
@@ -160,7 +188,7 @@ function getTemp(){
 // initiate
 STRING_O_SENSORS <- {
     uart12 = DS18B20( hardware.uart12, "uart12" )
-    uart57 = DS18B20( hardware.uart57, "uart57" )
+    // uart57 = DS18B20( hardware.uart57, "uart57" )
 }
 
 // start loops
