@@ -135,7 +135,8 @@ class DS18B20 extends OneWireStub
                     _wire.reset();
 
                     // Calculate the temperature from LSB and MSB
-                    local tempCelsius = ((tempMSB * 256) + tempLSB) / 16.0;
+                    local tempCelsius =  (tempMSB << 8) + tempLSB;
+                    tempCelsius = ((tempCelsius << 16) >> 16) / 16.0;
                     
                     // if value is 4095.94, then assume not present
                     
